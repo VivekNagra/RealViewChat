@@ -29,3 +29,5 @@ out/*
 check_models.py
 
 cases/*
+
+baseline/

@@ -1,5 +1,5 @@
-import json
 import shutil
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,10 +9,20 @@ from flask_cors import CORS
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OUT_DIR = PROJECT_ROOT / "out"
-FEEDBACK_PATH = OUT_DIR / "feedback.json"
 GROUND_TRUTH_DIR = OUT_DIR / "ground_truth"
-
 CASES_ROOT = PROJECT_ROOT / "cases"
+
+# make src/realview_chat importable when running via `python web/backend/app.py`
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from sqlalchemy import select, text  # noqa: E402
+
+from realview_chat.db.base import SessionLocal, engine  # noqa: E402
+from realview_chat.db.models import Feedback, Image, Property  # noqa: E402
+from realview_chat.db.serializers import (  # noqa: E402
+    list_feedback,
+    list_properties,
+)
 
 app = Flask(__name__)
 CORS(app)
@@ -20,25 +30,7 @@ CORS(app)
 
 @app.route("/api/properties", methods=["GET"])
 def get_properties():
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    properties = []
-    for path in sorted(OUT_DIR.glob("results_*.json")):
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            properties.append(data)
-        except (json.JSONDecodeError, OSError):
-            continue
-    # fallback for legacy single-file format
-    if not properties and (OUT_DIR / "results.json").exists():
-        try:
-            with open(OUT_DIR / "results.json", encoding="utf-8") as f:
-                data = json.load(f)
-            if data and isinstance(data, dict) and "property_id" in data:
-                properties.append(data)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return jsonify(properties)
+    return jsonify(list_properties())
 
 
 @app.route("/api/images/<property_id>/<path:filename>", methods=["GET"])
@@ -58,15 +50,7 @@ def serve_image(property_id, filename):
 
 @app.route("/api/feedback", methods=["GET"])
 def get_feedback():
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    if not FEEDBACK_PATH.exists():
-        return jsonify([])
-    try:
-        with open(FEEDBACK_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-        return jsonify(data if isinstance(data, list) else [])
-    except (json.JSONDecodeError, OSError):
-        return jsonify([])
+    return jsonify(list_feedback())
 
 
 @app.route("/api/feedback", methods=["POST"])
@@ -115,23 +99,45 @@ def post_feedback():
         entry["score_type"] = score_type
         entry["value"] = value
         entry["timestamp"] = datetime.now(timezone.utc).isoformat()
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    if FEEDBACK_PATH.exists():
-        try:
-            with open(FEEDBACK_PATH, encoding="utf-8") as f:
-                feedback = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            feedback = []
-    else:
-        feedback = []
-    feedback.append(entry)
-    try:
-        with open(FEEDBACK_PATH, "w", encoding="utf-8") as f:
-            json.dump(feedback, f, indent=2)
-    except OSError as e:
-        return jsonify({"error": str(e)}), 500
 
-    # approved images get copied to ground truth folder
+    # discriminator matches the migration script's logic
+    if "classification" in entry:
+        ftype = "classification"
+    elif "feature_id" in entry and "verdict" in entry:
+        ftype = "verdict"
+    elif "score_type" in entry and "value" in entry:
+        ftype = "score"
+    else:
+        return jsonify({"error": "Internal: could not classify feedback entry"}), 400
+
+    try:
+        with SessionLocal.begin() as session:
+            ext_pid = str(entry["property_id"])
+            prop_pk = session.scalar(
+                select(Property.id).where(Property.property_id == ext_pid)
+            )
+            if prop_pk is None:
+                return jsonify({"error": f"Unknown property_id: {ext_pid}"}), 404
+            image_pk = session.scalar(
+                select(Image.id).where(
+                    Image.property_id == prop_pk,
+                    Image.filename == entry["filename"],
+                )
+            )
+            session.add(Feedback(
+                property_id=prop_pk,
+                image_id=image_pk,
+                feedback_type=ftype,
+                feature_id=entry.get("feature_id"),
+                verdict=entry.get("verdict"),
+                classification=entry.get("classification"),
+                score_type=entry.get("score_type"),
+                score_value=entry.get("value"),
+            ))
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc)}), 500
+
+    # approved images get copied to ground truth folder (filesystem behavior preserved)
     if entry.get("classification") == "correct":
         _copy_to_ground_truth(entry["property_id"], entry["filename"])
 
@@ -156,14 +162,9 @@ def _copy_to_ground_truth(property_id: str, filename: str) -> None:
         app.logger.error("Failed to copy to ground truth: %s", exc)
 
 
-def _load_ai_scores() -> dict[tuple[str, str], dict[str, int | None]]:
-    ai_scores: dict[tuple[str, str], dict[str, int | None]] = {}
-    for path in OUT_DIR.glob("results_*.json"):
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            continue
+def _load_ai_scores_from_properties(properties: list[dict]) -> dict[tuple[str, str], dict]:
+    ai_scores: dict[tuple[str, str], dict] = {}
+    for data in properties:
         pid = str(data.get("property_id", ""))
         for img in data.get("images", []):
             fname = img.get("filename", "")
@@ -256,13 +257,7 @@ def _total_to_grade(total: int) -> tuple[str, str]:
 
 @app.route("/api/stats", methods=["GET"])
 def get_stats():
-    feedback = []
-    if FEEDBACK_PATH.exists():
-        try:
-            with open(FEEDBACK_PATH, encoding="utf-8") as f:
-                feedback = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            feedback = []
+    feedback = list_feedback()
 
     # dedup: only keep the latest classification per image
     latest: dict[tuple[str, str], str] = {}
@@ -278,7 +273,8 @@ def get_stats():
     precision = (correct / (correct + fp) * 100) if (correct + fp) > 0 else 0
     recall = (correct / (correct + fn) * 100) if (correct + fn) > 0 else 0
 
-    ai_scores = _load_ai_scores()
+    properties = list_properties()
+    ai_scores = _load_ai_scores_from_properties(properties)
     calibration = _compute_calibration(feedback, ai_scores)
 
     return jsonify({
@@ -295,11 +291,10 @@ def get_stats():
 @app.route("/api/reset", methods=["DELETE"])
 def reset_benchmarking():
     try:
-        OUT_DIR.mkdir(parents=True, exist_ok=True)
-        with open(FEEDBACK_PATH, "w", encoding="utf-8") as f:
-            json.dump([], f)
-    except OSError as e:
-        return jsonify({"error": f"Failed to clear feedback: {e}"}), 500
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE feedback RESTART IDENTITY;"))
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": f"Failed to clear feedback: {exc}"}), 500
 
     try:
         if GROUND_TRUTH_DIR.exists():
@@ -335,8 +330,6 @@ def serve_ground_truth_image(filename):
 
 @app.route("/api/summary", methods=["GET"])
 def get_summary():
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-
     total_images = 0
     kitchen_count = 0
     bathroom_count = 0
@@ -357,14 +350,8 @@ def get_summary():
     property_damage: dict[str, dict[str, int]] = {}
     property_room_grades: list[dict] = []
 
-    for path in sorted(OUT_DIR.glob("results_*.json")):
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            continue
-
-        prop_id = data.get("property_id", path.stem)
+    for data in list_properties():
+        prop_id = data.get("property_id")
         images = data.get("images", [])
         proposal_image_counts.append(len(images))
         total_images += len(images)
@@ -373,7 +360,7 @@ def get_summary():
 
         for img in images:
             p1 = img.get("pass1", {})
-            room = p1.get("room_type", "").lower()
+            room = (p1.get("room_type") or "").lower()
             actionable = p1.get("actionable", False)
 
             p1_conf = p1.get("confidence")
