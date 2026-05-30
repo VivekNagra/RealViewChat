@@ -16,10 +16,12 @@ CASES_ROOT = PROJECT_ROOT / "cases"
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from sqlalchemy import select, text  # noqa: E402
+from sqlalchemy.orm import selectinload  # noqa: E402
 
 from realview_chat.db.base import SessionLocal, engine  # noqa: E402
-from realview_chat.db.models import Feedback, Image, Property  # noqa: E402
+from realview_chat.db.models import Feedback, Image, Property, Room  # noqa: E402
 from realview_chat.db.serializers import (  # noqa: E402
+    _serialize_property,
     list_feedback,
     list_properties,
 )
@@ -31,6 +33,49 @@ CORS(app)
 @app.route("/api/properties", methods=["GET"])
 def get_properties():
     return jsonify(list_properties())
+
+
+@app.route("/api/properties/flagged", methods=["GET"])
+def get_flagged_properties():
+    """Properties with >=1 high-severity image feature (filter on a non-key
+    attribute). Productionised from the Phase-1 benchmark endpoint; the response
+    shape [{property_id, high_severity_count}] was validated byte-identical
+    across the JSON-file and DB apps."""
+    sql = text(
+        "SELECT p.property_id, count(*) AS high_severity_count "
+        "FROM image_features f "
+        "JOIN images i ON i.id = f.image_id "
+        "JOIN properties p ON p.id = i.property_id "
+        "WHERE f.severity = 'high' "
+        "GROUP BY p.property_id "
+        "ORDER BY p.property_id"
+    )
+    with SessionLocal() as session:
+        rows = session.execute(sql).all()
+    return jsonify([
+        {"property_id": pid, "high_severity_count": int(cnt)}
+        for pid, cnt in rows
+    ])
+
+
+@app.route("/api/properties/<property_id>", methods=["GET"])
+def get_property(property_id):
+    """Point lookup by external property_id (served by the unique index on
+    properties.property_id). Returns the same per-property dict shape as one
+    element of GET /api/properties; 404 when the id is unknown."""
+    with SessionLocal() as session:
+        stmt = (
+            select(Property)
+            .options(
+                selectinload(Property.images).selectinload(Image.features),
+                selectinload(Property.rooms).selectinload(Room.features),
+            )
+            .where(Property.property_id == property_id)
+        )
+        prop = session.scalars(stmt).first()
+        if prop is None:
+            return jsonify({"error": "Property not found"}), 404
+        return jsonify(_serialize_property(prop))
 
 
 @app.route("/api/images/<property_id>/<path:filename>", methods=["GET"])

@@ -1,0 +1,81 @@
+name: CI
+
+# Quality gate on every push and PR (Softwarekvalitet): lint + the layered
+# Python suite with a coverage floor, plus the frontend Vitest suite. The build
+# goes red if a test fails OR coverage drops below the floor.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend:
+    name: backend (lint + pytest + coverage gate)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: realview
+          POSTGRES_PASSWORD: realview_dev
+          POSTGRES_DB: realview_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U realview -d realview_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The real migrations build the schema against this DB (conftest asserts
+      # the URL ends with /realview_test before touching anything).
+      TEST_DATABASE_URL: postgresql+psycopg2://realview:realview_dev@localhost:5432/realview_test
+      DATABASE_URL: postgresql+psycopg2://realview:realview_dev@localhost:5432/realview_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov ruff
+
+      - name: Lint (ruff)
+        run: ruff check src tests web/backend
+
+      - name: Run migrations against the test DB
+        run: alembic upgrade head
+
+      - name: Test + coverage gate (fails under 75%)
+        run: pytest
+
+  frontend:
+    name: frontend (Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest
+        run: npm test
