@@ -11,8 +11,74 @@ dependencies = [
   "openai",
 ]
 
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "psycopg2-binary>=2.9",
+  "ruff>=0.6",
+]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# --- Testing / Software Quality -------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=75"
+markers = [
+  "requirement(id): trace a test to a bachelor-report requirement ID (R1..R7)",
+]
+
+[tool.coverage.run]
+branch = true
+# Coverage gate scope = the production LIBRARY, where the domain logic lives
+# (serializers, ORM/persistence, pipeline). The Flask app (web/backend/app.py)
+# is the presentation/entrypoint tier and is reported separately, NOT gated: its
+# three data endpoints are covered by integration tests, while the summary/
+# stats/feedback endpoints are deliberate future test work (see report). The
+# benchmark harness lives OUTSIDE the repo and is not product code.
+source = ["src/realview_chat"]
+omit = [
+  "*/__init__.py",
+  "*/config.py",                              # static configuration (boilerplate)
+  "*/realview_chat/utils/logging.py",         # logging setup (boilerplate)
+  # OpenAI integration tier: exercised only against the live API and mocked via
+  # the LLMClient seam in tests (no network in CI).
+  "*/realview_chat/openai_client/responses.py",
+  "*/realview_chat/openai_client/prompts.py",
+  "*/realview_chat/openai_client/schemas.py",
+  "*/realview_chat/utils/rate_limit.py",      # wall-clock sleeps; live-API plumbing
+  "*/realview_chat/utils/retry.py",           # retry/backoff for the live-API path
+  # File/image IO used by the ingest CLI, not by the tested DB product:
+  "*/realview_chat/io/image_loader.py",       # needs real image files on disk
+  "*/realview_chat/io/csv_reader.py",         # CSV ingest CLI path
+  "*/realview_chat/io/results_writer.py",     # legacy JSON-file writer (pre-DB)
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+  "raise NotImplementedError",
+  "\\.\\.\\.",                                 # Protocol method stubs
+  "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "web/backend", "tests"]
+
+[tool.ruff.lint]
+extend-select = ["I"]  # import sorting
+
+[tool.ruff.lint.isort]
+known-first-party = ["realview_chat", "factories", "fakes"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # re-exports are intentional

@@ -4,7 +4,7 @@ import logging
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 from realview_chat.io.image_loader import list_image_files, load_images_as_data_urls
 from realview_chat.pipeline.pass1 import Pass1Result, run_pass1

@@ -6,10 +6,11 @@ from typing import Any, Protocol
 
 from openai import OpenAI
 
-from . import prompts, schemas
+from realview_chat.config import AppConfig
 from realview_chat.utils.rate_limit import RateLimiter
 from realview_chat.utils.retry import with_retry
-from realview_chat.config import AppConfig
+
+from . import prompts, schemas
 
 
 class LLMClient(Protocol):
