@@ -21,7 +21,11 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = "http://localhost:5001"
+#  127.0.0.1 (not "localhost") so urllib doesn't stall trying IPv6 ::1 first.
+BASE = "http://127.0.0.1:5001"
+
+# Skip system-proxy auto-detection (otherwise urlopen is very slow on Windows).
+urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
 
 
 def _get(path: str) -> None:
