@@ -15,6 +15,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))  # so realview_chat imports resolv
 from sqlalchemy import func, select, text  # noqa: E402
 
 from realview_chat.db.base import SessionLocal, engine  # noqa: E402
+from realview_chat.db.ingest import parse_dt as _parse_dt  # noqa: E402
+from realview_chat.db.ingest import persist_property_aggregate  # noqa: E402
 from realview_chat.db.models import (  # noqa: E402
     Feedback,
     Image,
@@ -31,14 +33,10 @@ ALL_TABLES = (
 )
 
 
-def _parse_dt(value: str | None) -> datetime | None:
-    """Parse an ISO-8601 timestamp; tolerate a trailing 'Z'. Return None if absent/invalid."""
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        return None
+# Back-compat alias: the migrate script's atomic unit is now the shared
+# persist_property_aggregate (single source of truth, reused by the worker).
+def migrate_one_property(session, data: dict) -> bool:
+    return persist_property_aggregate(session, data)
 
 
 def load_results_files() -> list[tuple[str, dict]]:

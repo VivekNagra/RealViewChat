@@ -6,6 +6,9 @@ flask-cors>=4.0.0
 # Observability
 prometheus-flask-exporter>=0.23.0
 
+# Async messaging (Systemintegration)
+pika==1.4.1
+
 #Database
 sqlalchemy>=2.0.0,<3.0.0
 alembic>=1.13.0

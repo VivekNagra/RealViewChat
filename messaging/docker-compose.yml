@@ -1,0 +1,44 @@
+name: realview-messaging
+
+# Async stack: RabbitMQ broker + the Vision worker container. The worker reaches
+# Postgres on the host (the existing realview-postgres) and exposes its metrics
+# on :9101 for Prometheus (see observability/prometheus/prometheus.yml).
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: realview-rabbitmq
+    hostname: realview-rabbit
+    # Pre-seed an Erlang cookie owned by the rabbitmq user before the server
+    # drops privileges -- works around a Docker-Desktop-on-Windows perms quirk
+    # (the standard image needs no this on Linux / CI).
+    entrypoint:
+      - /bin/bash
+      - -c
+      - "printf realviewcookie | install -m 400 -o rabbitmq -g rabbitmq /dev/stdin /var/lib/rabbitmq/.erlang.cookie && exec gosu rabbitmq docker-entrypoint.sh rabbitmq-server"
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # management UI (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.worker
+    container_name: realview-worker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: postgresql+psycopg2://realview:realview_dev@host.docker.internal:5432/realview
+      RV_WORKER_METRICS_PORT: "9101"
+      # the worker only calls OpenAI when it actually processes a job
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-unused-no-jobs}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9101:9101"   # worker /metrics for Prometheus

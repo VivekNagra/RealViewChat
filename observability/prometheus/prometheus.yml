@@ -9,3 +9,11 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["host.docker.internal:5001"]
+
+  # The async Vision worker exposes pipeline metrics on :9101 (its own
+  # prometheus_client server). Runs as the worker container (messaging/
+  # docker-compose.yml maps 9101 to the host) or via messaging/demo_worker.py.
+  - job_name: realview-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:9101"]

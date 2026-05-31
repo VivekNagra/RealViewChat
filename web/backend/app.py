@@ -102,6 +102,28 @@ def get_property(property_id):
         return jsonify(_serialize_property(prop))
 
 
+@app.route("/api/inspections", methods=["POST"])
+def create_inspection():
+    """Accept an inspection request and ENQUEUE it for the async worker, then
+    return 202 immediately -- the heavy Vision pipeline runs out-of-band. This
+    is additive; the existing synchronous endpoints/contract are untouched."""
+    body = request.get_json(silent=True) or {}
+    property_id = body.get("property_id")
+    if not property_id:
+        return jsonify({"error": "property_id required"}), 400
+    # lazy import so the web app stays decoupled from the broker client
+    from realview_chat.messaging.producer import publish_inspection
+    try:
+        publish_inspection(
+            property_id,
+            images_dir=body.get("images_dir"),
+            images=body.get("images"),
+        )
+    except Exception as exc:  # noqa: BLE001  (broker unreachable, etc.)
+        return jsonify({"error": f"could not enqueue inspection: {exc}"}), 503
+    return jsonify({"property_id": str(property_id), "status": "queued"}), 202
+
+
 @app.route("/api/images/<property_id>/<path:filename>", methods=["GET"])
 def serve_image(property_id, filename):
     base = Path(filename).name
