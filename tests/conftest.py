@@ -119,3 +119,37 @@ def db_session(db_connection):
 def client(db_connection, flask_app):
     """Flask test client whose endpoints share the test transaction."""
     return flask_app.test_client()
+
+
+@pytest.fixture()
+def rabbitmq():
+    """A channel on the REAL broker with a freshly-purged topology.
+
+    Skips the test if RabbitMQ is unreachable, so the rest of the suite still
+    runs without a broker locally; CI always provides one. Publisher confirms
+    are enabled so message-count assertions are deterministic.
+    """
+    import pika
+
+    from realview_chat.messaging import config as mc
+    from realview_chat.messaging.topology import declare_topology
+
+    try:
+        conn = pika.BlockingConnection(pika.URLParameters(mc.RABBITMQ_URL))
+    except Exception as exc:  # pragma: no cover  (no broker -> skip)
+        pytest.skip(f"RabbitMQ not available at {mc.RABBITMQ_URL}: {exc}")
+
+    channel = conn.channel()
+    channel.confirm_delivery()
+    declare_topology(channel)
+    channel.queue_purge(mc.WORK_QUEUE)
+    channel.queue_purge(mc.DLQ)
+    try:
+        yield channel
+    finally:
+        try:
+            channel.queue_purge(mc.WORK_QUEUE)
+            channel.queue_purge(mc.DLQ)
+            conn.close()
+        except Exception:  # pragma: no cover
+            pass
