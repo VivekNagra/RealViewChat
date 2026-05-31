@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # The Flask backend runs on the host (see README: python web/backend/app.py,
+  # port 5001). Run it bound to 0.0.0.0 so the container can scrape it.
+  - job_name: realview-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:5001"]

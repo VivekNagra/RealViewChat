@@ -1,0 +1,36 @@
+name: realview-observability
+
+# Exam-scope observability stack: Prometheus scrapes the Flask backend's
+# /metrics endpoint (running on the host at :5001) and Grafana visualises it.
+# Everything is provisioned as code so the stack is reproducible from `up`.
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: realview-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      # lets the container reach the Flask app on the host (Docker Desktop +
+      # Linux); on Docker Desktop host.docker.internal already resolves.
+      - "host.docker.internal:host-gateway"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: realview-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # anonymous viewer so the dashboard opens without a login prompt (demo only)
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
