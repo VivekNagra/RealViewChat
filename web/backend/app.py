@@ -15,6 +15,10 @@ CASES_ROOT = PROJECT_ROOT / "cases"
 # make src/realview_chat importable when running via `python web/backend/app.py`
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+# aliased so they don't shadow collections.Counter used by /api/summary
+from prometheus_client import Counter as PromCounter  # noqa: E402
+from prometheus_client import Gauge as PromGauge  # noqa: E402
+from prometheus_flask_exporter import PrometheusMetrics  # noqa: E402
 from sqlalchemy import select, text  # noqa: E402
 from sqlalchemy.orm import selectinload  # noqa: E402
 
@@ -28,6 +32,25 @@ from realview_chat.db.serializers import (  # noqa: E402
 
 app = Flask(__name__)
 CORS(app)
+
+# --- Observability -------------------------------------------------------
+# Auto-instrument every request: rate, a latency histogram and status codes,
+# grouped by the matched URL rule (low cardinality), exposed at GET /metrics.
+# Additive only -- no existing response body changes.
+metrics = PrometheusMetrics(app, group_by="url_rule")
+metrics.info("realview_app_info", "RealView backend info", version="0.1.0")
+
+# Domain-specific signals reflecting RealView's product reality:
+FLAGGED_PROPERTIES = PromGauge(
+    "realview_flagged_properties",
+    "Properties with >=1 high-severity image feature "
+    "(refreshed on each GET /api/properties/flagged).",
+)
+FEEDBACK_SUBMITTED = PromCounter(
+    "realview_feedback_submitted_total",
+    "Human feedback submissions accepted, by discriminator type.",
+    ["feedback_type"],
+)
 
 
 @app.route("/api/properties", methods=["GET"])
@@ -52,6 +75,7 @@ def get_flagged_properties():
     )
     with SessionLocal() as session:
         rows = session.execute(sql).all()
+    FLAGGED_PROPERTIES.set(len(rows))  # domain signal
     return jsonify([
         {"property_id": pid, "high_severity_count": int(cnt)}
         for pid, cnt in rows
@@ -186,6 +210,7 @@ def post_feedback():
     if entry.get("classification") == "correct":
         _copy_to_ground_truth(entry["property_id"], entry["filename"])
 
+    FEEDBACK_SUBMITTED.labels(feedback_type=ftype).inc()  # domain signal
     return jsonify({"ok": True, "entry": entry}), 201
 
 
