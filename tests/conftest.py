@@ -1,6 +1,6 @@
-"""Shared test infrastructure for RealView's Software Quality suite.
+"""Shared test infrastructure for RealView's test suite.
 
-Design choices (see the bachelor report, Software Quality section):
+Design choices:
 
 * REAL PostgreSQL test database (`realview_test`), never SQLite. RealView's
   guarantees live in Postgres-specific objects (CHECK constraints, FK cascade,

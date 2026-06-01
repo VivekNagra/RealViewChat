@@ -6,10 +6,6 @@ dashboard. Originally a prototype, now productionised: a relational data layer,
 an automated test suite with a CI quality gate, Prometheus/Grafana
 observability, and an asynchronous Vision worker behind RabbitMQ.
 
-> Bachelor project (Cphbusiness, PBA Softwareudvikling). The written report is
-> the documentation home for the academic analysis; this README is the
-> operational guide.
-
 ## Architecture
 
 ```

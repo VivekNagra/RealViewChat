@@ -14,7 +14,7 @@ ROUTING_KEY = "inspect"
 DLQ_ROUTING_KEY = "dead"
 
 # Bounded retry: a job is retried at most MAX_RETRIES times before it is
-# dead-lettered. Retries are immediate (no backoff) -- see report.
+# dead-lettered. Retries are immediate (no backoff).
 MAX_RETRIES = int(os.getenv("RV_MAX_RETRIES", "3"))
 RETRY_HEADER = "x-retry-count"
 

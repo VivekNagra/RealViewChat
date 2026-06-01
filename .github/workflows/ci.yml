@@ -1,6 +1,6 @@
 name: CI
 
-# Quality gate on every push and PR (Softwarekvalitet): lint + the layered
+# Quality gate on every push and PR: lint + the layered
 # Python suite with a coverage floor, plus the frontend Vitest suite. The build
 # goes red if a test fails OR coverage drops below the floor.
 on:

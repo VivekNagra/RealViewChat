@@ -1,6 +1,6 @@
 """Rebuild the legacy JSON-file API shapes from the ORM.
 
-Phase-1 goal: every endpoint in web/backend/app.py keeps the exact same
+Goal: every endpoint in web/backend/app.py keeps the exact same
 response shape so the React frontend needs no changes. This module is the
 sole place that knows the mapping from DB rows back to the legacy dicts.
 """
