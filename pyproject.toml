@@ -25,12 +25,12 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# --- Testing / Software Quality -------------------------------------------
+# --- Testing -------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=75"
 markers = [
-  "requirement(id): trace a test to a bachelor-report requirement ID (R1..R7)",
+  "requirement(id): trace a test to a requirement ID",
 ]
 
 [tool.coverage.run]
@@ -39,7 +39,7 @@ branch = true
 # (serializers, ORM/persistence, pipeline). The Flask app (web/backend/app.py)
 # is the presentation/entrypoint tier and is reported separately, NOT gated: its
 # three data endpoints are covered by integration tests, while the summary/
-# stats/feedback endpoints are deliberate future test work (see report). The
+# stats/feedback endpoints are deliberate future test work. The
 # benchmark harness lives OUTSIDE the repo and is not product code.
 source = ["src/realview_chat"]
 omit = [

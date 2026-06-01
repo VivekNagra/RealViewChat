@@ -44,8 +44,8 @@ canned client so the dashboard shows live data without API cost.
 > the `rabbitmq` user (a Windows perms quirk). The Linux CI service container
 > needs none of this.
 
-## C4-2b status
-The container diagram's planned **broker** and **worker** are now **real**: a
-RabbitMQ container and a worker container (`Dockerfile.worker`). Still
-`[LATER]`: a full build→deploy CD pipeline, and multiple/competing workers,
-autoscaling, broker clustering, prefetch tuning.
+## Container status
+The **broker** and **worker** now run as real containers (a RabbitMQ container
+and a worker container, `Dockerfile.worker`). Still `[LATER]`: a full
+build→deploy CD pipeline, and multiple/competing workers, autoscaling, broker
+clustering, prefetch tuning.

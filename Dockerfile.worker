@@ -1,4 +1,4 @@
-# Async Vision worker (Systemintegration). Packaging only -- NOT a deployment
+# Async Vision worker. Packaging only -- NOT a deployment
 # pipeline (CD stays future work). Runs scripts/run_worker.py, which consumes
 # inspection jobs from RabbitMQ and persists Property aggregates.
 FROM python:3.14-slim
