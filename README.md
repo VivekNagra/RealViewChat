@@ -38,6 +38,11 @@ observability, and an asynchronous Vision worker behind RabbitMQ.
 - **Observability** (`observability/`) — `/metrics` on the API and the worker,
   scraped by Prometheus, visualised by Grafana (all provisioned as code).
 
+## Diagrams
+
+System and UML diagrams (domain model, asynchronous inspection sequence, LLMClient
+class diagram, use-case overview), rendered on GitHub: [docs/DIAGRAMS.md](docs/DIAGRAMS.md).
+
 ## Prerequisites
 
 - Python **3.14** (project runs on 3.11–3.14)
