@@ -74,7 +74,7 @@ classDiagram
     Feedback "0..*" ..> "1" Property : references
     Feedback "0..*" ..> "0..1" Image : may reference
 
-    note "PropertyAggregate is one consistency boundary, persisted atomically by persist_property_aggregate (property to pipeline_run to images to image_features to rooms to room_features). property_id is the unique external key. Reviewer Feedback references a Property but is written separately, after human review."
+    note "PropertyAggregate is one consistency boundary, persisted atomically by persist_property_aggregate<br/>(property to pipeline_run to images to image_features to rooms to room_features).<br/>property_id is the unique external key.<br/>Reviewer Feedback references a Property but is written separately, after human review."
 ```
 
 ## Asynchronous inspection sequence (report Figure 8)
