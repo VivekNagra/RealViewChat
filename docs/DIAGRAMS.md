@@ -164,7 +164,7 @@ classDiagram
     create_client ..> OpenAIBackend : builds
     create_client ..> LLMClient : returns
 
-    note for LLMClient "Dependency-injection seam: production code receives the real OpenAIBackend; tests inject the deterministic FakeVisionClient. The pipeline depends only on this Protocol, so tests run with no network and no API cost."
+    note for LLMClient "Dependency-injection seam: production code receives the real OpenAIBackend;<br/>tests inject the deterministic FakeVisionClient.<br/>The pipeline depends only on this Protocol,<br/>so tests run with no network and no API cost."
 ```
 
 ## Use case overview (report Figure 10)
